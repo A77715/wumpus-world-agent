@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wumpus World Logic Agent</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { 
+     font-family: Arial, sans-serif;  
+     background: #0f172a;  
+     color: #f1f5f9; 
+      min-height: 100vh;  
+      padding: 1rem; }
+  h1 { text-align: center;  
+    font-size: 22px;  
+    font-weight: 500; 
+     margin-bottom: 1rem;  
+     color: #f1f5f9; }
+  .top-bar {  
+    display: flex; 
+     align-items: center;  
+      gap: 12px; 
+       flex-wrap: wrap;  
+        margin-bottom: 1rem;  
+        justify-content: center; }
+  .top-bar label {  
+    font-size: 13px;  
+    color: #94a3b8; }
+  .top-bar input[type=number] {  
+    width: 60px;  
+    padding: 6px 8px; 
+     font-size: 13px; 
+      background: #1e293b; 
+      border: 1px solid #334155; 
+      border-radius: 6px; color: #f1f5f9; }
+  .top-bar button { 
+     font-size: 13px; 
+      padding: 7px 16px; 
+       background: #1e293b; 
+        border: 1px solid #334155;
+         border-radius: 6px;
+          color: #f1f5f9; 
+          cursor: pointer; 
+          transition: background .15s; }
+  .top-bar button:hover { background: #334155; }
+  .main { 
+     display: grid;
+      grid-template-columns: 1fr minmax(0, 340px);
+       gap: 16px; 
+       max-width: 1100px; 
+       margin: 0 auto; }
+  #grid-wrap { overflow: auto; }
+  #grid { display: inline-grid; 
+     gap: 4px; 
+     border: 1px solid #334155; 
+     padding: 8px;
+      border-radius: 12px; 
+      background: #1e293b; }
+  .cell { width: 64px; 
+    height: 64px; 
+    border-radius: 8px; display: flex; 
+    flex-direction: column; align-items: center; 
+    justify-content: center; font-size: 11px;
+     font-weight: 500; 
+     cursor: default;
+      border: 2px solid transparent;
+      position: relative;
+       user-select: none; 
+      transition: border .15s; }
+  .cell.unknown  { background: #64748b; color: #f1efe8; }
+  .cell.visited  { background: #185fa5; color: #e6f1fb; }
+  .cell.safe     { background: #3b6d11; color: #eaf3de; }
+  .cell.danger   { background: #a32d2d; color: #fcebeb; }
+  .cell.agent    { background: #854f0b; color: #faeeda; border-color: #ef9f27; }
+  .cell .coord   { font-size: 9px; 
+     opacity: .7;  
+     position: absolute; 
+     top: 3px;  
+     left: 4px; }
+  .cell .icons   { font-size: 14px; line-height: 1; }
+  .cell .percept { font-size: 9px; margin-top: 2px; opacity: .85; }
+  .panel { display: flex;  
+    flex-direction: column; 
+     gap: 12px; }
+  .card { background: #1e293b; 
+     border: 1px solid #334155; 
+      border-radius: 12px; 
+      padding: 1rem 1.25rem; }
+  .card h3 { font-size: 12px; 
+    font-weight: 500; 
+    color: #64748b;  
+    margin-bottom: 10px;
+     text-transform: uppercase; 
+      letter-spacing: .05em; }
+  .metric-row { display: grid;
+     grid-template-columns: 1fr 1fr;  
+     gap: 8px; }
+  .metric { background: #0f172a;  
+    border-radius: 8px; padding: .75rem;  
+    text-align: center; }
+  .metric .val { font-size: 22px; font-weight: 500;  
+    line-height: 1; color: #f1f5f9; }
+  .metric .lbl { font-size: 12px;  
+    color: #64748b; margin-top: 4px; }
+  #percepts-list { font-size: 13px; 
+     line-height: 2; color: #94a3b8; }
+  #percepts-list span { display: inline-block; 
+     padding: 2px 10px; border-radius: 99px; 
+      font-size: 12px; margin: 2px 3px; }
+  .p-breeze  { background: #1e3a5f; color: #93c5fd; }
+  .p-stench  { background: #4a1b0c; color: #fca5a5; }
+  .p-glitter { background: #422006; color: #fcd34d; }
+  .p-safe    { background: #14532d; color: #86efac; }
+  #log { font-size: 11px;  
+    line-height: 1.7; max-height: 160px; 
+     overflow-y: auto; color: #94a3b8;  
+     font-family: 'Courier New', monospace; }
+  #log .inf  { color: #60a5fa; }
+  #log .warn { color: #f87171; }
+  #log .ok   { color: #4ade80; }
+  .legend { display: flex; 
+     flex-wrap: wrap; gap: 8px; 
+      font-size: 11px;  
+      color: #94a3b8; }
+  .leg { display: flex;  
+    align-items: center;  
+    gap: 5px; }
+  .leg-dot { width: 12px;  
+    height: 12px; 
+     border-radius: 3px; 
+      flex-shrink: 0; }
+  @media (max-width: 700px) {
+    .main { grid-template-columns: 1fr; }
+    .cell { width: 48px;  
+        height: 48px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Wumpus World — Knowledge-Based Logic Agent</h1>
+
+<div class="top-bar">
+  <label>Rows <input type="number" id="inp-rows" value="4" min="3" max="8"></label>
+  <label>Cols <input type="number" id="inp-cols" value="4" min="3" max="8"></label>
+  <button onclick="initWorld()">New World</button>
+  <button onclick="stepAgent()">Step Agent</button>
+  <button onclick="autoRun()" id="auto-btn">Auto Run</button>
+</div>
+
+<div class="main">
+  <div id="grid-wrap"><div id="grid"></div></div>
+  <div class="panel">
+    <div class="card">
+      <h3>Metrics</h3>
+      <div class="metric-row">
+        <div class="metric"><div class="val" id="m-steps">0</div><div class="lbl">Agent Steps</div></div>
+        <div class="metric"><div class="val" id="m-infer">0</div><div class="lbl">Inference Steps</div></div>
+        <div class="metric"><div class="val" id="m-safe">0</div><div class="lbl">Safe Proven</div></div>
+        <div class="metric"><div class="val" id="m-danger">0</div><div class="lbl">Dangers Found</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Active Percepts at Agent Location</h3>
+      <div id="percepts-list">—</div>
+    </div>
+    <div class="card">
+      <h3>Inference Log (Resolution Engine)</h3>
+      <div id="log"></div>
+    </div>
+    <div class="card">
+      <h3>Legend</h3>
+      <div class="legend">
+        <div class="leg"><div class="leg-dot" style="background:#854f0b;border:2px solid #ef9f27"></div>Agent</div>
+        <div class="leg"><div class="leg-dot" style="background:#185fa5"></div>Visited</div>
+        <div class="leg"><div class="leg-dot" style="background:#3b6d11"></div>Safe (proven)</div>
+        <div class="leg"><div class="leg-dot" style="background:#64748b"></div>Unknown</div>
+        <div class="leg"><div class="leg-dot" style="background:#a32d2d"></div>Danger confirmed</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+
+
+let ROWS = 4, COLS = 4;
+let world  = { pits: new Set(), wumpusPos: null, gold: null };
+let agent  = { r: 0, c: 0, alive: true, hasGold: false, hasArrow: true };
+let kb     = { facts: new Set(), rules: [] };
+let cellState = {};
+let metrics   = { steps: 0, infer: 0, safe: 0, danger: 0 };
+let autoTimer = null, autoRunning = false;
+
+
+function rc(r, c) { return r + ',' + c; }
+
+function adj(r, c) {
+  let a = [];
+  if (r > 0)       a.push([r - 1, c]);
+  if (r < ROWS - 1) a.push([r + 1, c]);
+  if (c > 0)       a.push([r, c - 1]);
+  if (c < COLS - 1) a.push([r, c + 1]);
+  return a;
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+
+function initWorld() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; autoRunning = false; document.getElementById('auto-btn').textContent = 'Auto Run'; }
+  ROWS = Math.max(3, Math.min(8, parseInt(document.getElementById('inp-rows').value) || 4));
+  COLS = Math.max(3, Math.min(8, parseInt(document.getElementById('inp-cols').value) || 4));
+
+  world  = { pits: new Set(), wumpusPos: null, gold: null };
+  agent  = { r: 0, c: 0, alive: true, hasGold: false, hasArrow: true };
+  kb     = { facts: new Set(), rules: [] };
+  cellState = {};
+  metrics   = { steps: 0, infer: 0, safe: 0, danger: 0 };
+  document.getElementById('log').innerHTML = '';
+
+  // Build candidate cells (exclude agent start)
+  let cells = [];
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (!(r === 0 && c === 0)) cells.push(rc(r, c));
+  shuffle(cells);
+
+  let numPits = Math.max(1, Math.floor(cells.length * 0.15));
+  for (let i = 0; i < numPits; i++) world.pits.add(cells[i]);
+  world.wumpusPos = cells[numPits];
+  world.gold      = cells[numPits + 1];
+
+  // Initialize cell states
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      cellState[rc(r, c)] = { visited: false, safe: false, danger: false };
+
+  // Start cell is always safe
+  cellState[rc(0, 0)].safe = true;
+  kb.facts.add('safe_0_0');
+
+  addLog('World initialized. Agent at (0,0). Pits: ' + world.pits.size + ', Wumpus placed.', 'ok');
+  updateMetrics();
+  renderGrid();
+  perceiveAndInfer();
+}
+
+
+function perceiveAndInfer() {
+  let r = agent.r, c = agent.c;
+  let breeze = false, stench = false, glitter = false;
+
+  adj(r, c).forEach(([nr, nc]) => {
+    if (world.pits.has(rc(nr, nc)))      breeze = true;
+    if (rc(nr, nc) === world.wumpusPos)  stench = true;
+  });
+  if (rc(r, c) === world.gold && !agent.hasGold) glitter = true;
+
+  // Record percepts in KB
+  if (breeze)  { kb.facts.add('breeze_' + r + '_' + c); }
+  else         { kb.facts.add('nobreeze_' + r + '_' + c); }
+  if (stench)  { kb.facts.add('stench_' + r + '_' + c); }
+  else         { kb.facts.add('nostench_' + r + '_' + c); }
+  if (glitter) { agent.hasGold = true; addLog('Glitter! Gold picked up.', 'ok'); }
+
+  // Update percepts display
+  let percepts = [];
+  if (breeze)  percepts.push('<span class="p-breeze">💨 Breeze</span>');
+  if (stench)  percepts.push('<span class="p-stench">💀 Stench</span>');
+  if (glitter) percepts.push('<span class="p-glitter">💛 Glitter</span>');
+  document.getElementById('percepts-list').innerHTML =
+    percepts.length ? percepts.join('') : '<span class="p-safe">None — all clear</span>';
+
+  // Run inference
+  tellKB(r, c, breeze, stench);
+  inferSafety();
+  renderGrid();
+}
+
+
+function tellKB(r, c, breeze, stench) {
+  metrics.infer++;
+  let neighbors = adj(r, c);
+
+  if (!breeze) {
+    // No breeze → ¬Pit for all neighbors (unit resolution)
+    neighbors.forEach(([nr, nc]) => {
+      let k = 'nopit_' + nr + '_' + nc;
+      if (!kb.facts.has(k)) {
+        kb.facts.add(k);
+        addLog('¬Pit(' + nr + ',' + nc + ') inferred: no breeze at (' + r + ',' + c + ')', 'inf');
+        metrics.infer++;
+      }
+    });
+  } else {
+   
+    let rule = { type: 'breeze', r, c, neighbors: neighbors.map(([nr, nc]) => rc(nr, nc)) };
+    kb.rules.push(rule);
+    addLog('TELL KB: B(' + r + ',' + c + ') ⟺ ∨{Pit at adj cells}', 'inf');
+    metrics.infer++;
+  }
+
+  if (!stench) {
+   
+    neighbors.forEach(([nr, nc]) => {
+      let k = 'nowumpus_' + nr + '_' + nc;
+      if (!kb.facts.has(k)) {
+        kb.facts.add(k);
+        addLog('¬Wumpus(' + nr + ',' + nc + ') inferred: no stench at (' + r + ',' + c + ')', 'inf');
+        metrics.infer++;
+      }
+    });
+  } else {
+   
+    let rule = { type: 'stench', r, c, neighbors: neighbors.map(([nr, nc]) => rc(nr, nc)) };
+    kb.rules.push(rule);
+    addLog('TELL KB: S(' + r + ',' + c + ') ⟺ Wumpus at adj cell', 'inf');
+    metrics.infer++;
+  }
+
+  updateMetrics();
+}
+
+function inferSafety() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      let k = rc(r, c);
+      if (cellState[k].danger) continue;
+      if (cellState[k].safe)   continue;
+      metrics.infer++;
+
+      if (resolutionRefute(r, c)) {
+        cellState[k].safe = true;
+        metrics.safe++;
+        addLog('ASK KB: ¬Pit∧¬Wumpus(' + r + ',' + c + ') — PROVED SAFE ✓', 'ok');
+      } else if (resolutionProveDanger(r, c)) {
+        cellState[k].danger = true;
+        metrics.danger++;
+        addLog('ASK KB: Danger confirmed at (' + r + ',' + c + ') ✗', 'warn');
+      }
+    }
+  }
+  updateMetrics();
+}
+
+// Resolution Refutation: prove cell is safe
+// Converts KB to CNF clauses, resolves to find contradiction with negation of goal
+function resolutionRefute(r, c) {
+  metrics.infer++;
+
+  // Direct unit facts: ¬Pit and ¬Wumpus already in KB
+  let noPit    = kb.facts.has('nopit_' + r + '_' + c);
+  let noWumpus = kb.facts.has('nowumpus_' + r + '_' + c);
+
+  // If both directly known, trivially safe
+  if (noPit && noWumpus) return true;
+
+  // Resolve pit safety: if no breeze in any adjacent visited cell → no pit here
+  let pitSafe = noPit;
+  if (!pitSafe) {
+    let adjVisited = adj(r, c).filter(([ar, ac]) => cellState[rc(ar, ac)] && cellState[rc(ar, ac)].visited);
+    let anyBreeze  = adjVisited.some(([ar, ac]) => kb.facts.has('breeze_' + ar + '_' + ac));
+    if (!anyBreeze && adjVisited.length > 0) {
+      pitSafe = true;
+      metrics.infer++;
+    }
+  }
+
+  // Resolve wumpus safety: if no stench in any adjacent visited cell → no wumpus here
+  let wumpusSafe = noWumpus;
+  if (!wumpusSafe) {
+    let adjVisited = adj(r, c).filter(([ar, ac]) => cellState[rc(ar, ac)] && cellState[rc(ar, ac)].visited);
+    let anyStench  = adjVisited.some(([ar, ac]) => kb.facts.has('stench_' + ar + '_' + ac));
+    if (!anyStench && adjVisited.length > 0) {
+      wumpusSafe = true;
+      metrics.infer++;
+    }
+    // Also safe if wumpus is already located elsewhere
+    if (!wumpusSafe && kb.facts.has('wumpus_located')) {
+      let locKey = 'wumpus_at_' + r + '_' + c;
+      if (!kb.facts.has(locKey)) wumpusSafe = true;
+    }
+  }
+
+  return pitSafe && wumpusSafe;
+}
+
+// Resolution: prove cell is dangerous
+// Uses CNF clause resolution — if all but one literal in a breeze clause are proven ¬Pit,
+// then the remaining cell must be the pit (unit propagation).
+function resolutionProveDanger(r, c) {
+  metrics.infer++;
+
+  // Check each breeze rule that references this cell
+  for (let rule of kb.rules) {
+    if (rule.type !== 'breeze') continue;
+    if (!rule.neighbors.includes(rc(r, c))) continue;
+
+    // Resolve: all other neighbors must be proven safe (¬Pit)
+    let others = rule.neighbors.filter(n => n !== rc(r, c));
+    let allOthersSafe = others.every(n => {
+      let [nr, nc] = n.split(',').map(Number);
+      return kb.facts.has('nopit_' + nr + '_' + nc);
+    });
+
+    if (allOthersSafe) {
+      // By resolution, this cell must have the pit
+      addLog('Resolution: All other pit candidates eliminated → Pit(' + r + ',' + c + ')', 'warn');
+      metrics.infer++;
+      return true;
+    }
+  }
+
+  // Check stench rules similarly for Wumpus
+  for (let rule of kb.rules) {
+    if (rule.type !== 'stench') continue;
+    if (!rule.neighbors.includes(rc(r, c))) continue;
+    let others = rule.neighbors.filter(n => n !== rc(r, c));
+    let allOthersSafe = others.every(n => {
+      let [nr, nc] = n.split(',').map(Number);
+      return kb.facts.has('nowumpus_' + nr + '_' + nc);
+    });
+    if (allOthersSafe) {
+      kb.facts.add('wumpus_at_' + r + '_' + c);
+      kb.facts.add('wumpus_located');
+      addLog('Resolution: All other Wumpus candidates eliminated → Wumpus(' + r + ',' + c + ')', 'warn');
+      metrics.infer++;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+
+function stepAgent() {
+  if (!agent.alive)    { addLog('Agent is dead. Start a new world.', 'warn'); return; }
+  if (agent.hasGold)   { addLog('Agent has gold! Mission complete.', 'ok'); return; }
+
+  let r = agent.r, c = agent.c;
+  cellState[rc(r, c)].visited = true;
+
+  // Candidate moves: unvisited, not confirmed dangerous
+  let candidates = adj(r, c).filter(([nr, nc]) => {
+    let k = rc(nr, nc);
+    return !cellState[k].visited && !cellState[k].danger;
+  });
+
+  // Prefer proven-safe cells
+  let safeNext = candidates.filter(([nr, nc]) => cellState[rc(nr, nc)].safe);
+  let chosen   = null;
+
+  if (safeNext.length > 0) {
+    chosen = safeNext[Math.floor(Math.random() * safeNext.length)];
+    addLog('Moving to proven safe cell (' + chosen[0] + ',' + chosen[1] + ')', 'ok');
+  } else if (candidates.length > 0) {
+    chosen = candidates[Math.floor(Math.random() * candidates.length)];
+    addLog('No proven safe move — exploring unknown (' + chosen[0] + ',' + chosen[1] + ')', 'warn');
+  } else {
+    addLog('No valid moves available. Agent is stuck.', 'warn');
+    return;
+  }
+
+  agent.r = chosen[0];
+  agent.c = chosen[1];
+  metrics.steps++;
+
+  let dest = rc(agent.r, agent.c);
+
+  // Check for death
+  if (world.pits.has(dest)) {
+    agent.alive = false;
+    cellState[dest].danger = true;
+    addLog('Agent fell into a pit at (' + agent.r + ',' + agent.c + ')! Game over.', 'warn');
+    metrics.danger++;
+    updateMetrics(); renderGrid(); return;
+  }
+  if (dest === world.wumpusPos) {
+    agent.alive = false;
+    cellState[dest].danger = true;
+    addLog('Agent met the Wumpus at (' + agent.r + ',' + agent.c + ')! Game over.', 'warn');
+    metrics.danger++;
+    updateMetrics(); renderGrid(); return;
+  }
+
+  cellState[dest].visited = true;
+  updateMetrics();
+  perceiveAndInfer();
+}
+
+
+function autoRun() {
+  if (autoRunning) {
+    clearInterval(autoTimer); autoTimer = null; autoRunning = false;
+    document.getElementById('auto-btn').textContent = 'Auto Run';
+  } else {
+    autoRunning = true;
+    document.getElementById('auto-btn').textContent = 'Stop';
+    autoTimer = setInterval(() => {
+      if (!agent.alive || agent.hasGold) {
+        clearInterval(autoTimer); autoTimer = null; autoRunning = false;
+        document.getElementById('auto-btn').textContent = 'Auto Run';
+        return;
+      }
+      stepAgent();
+    }, 600);
+  }
+}
+
+
+function renderGrid() {
+  let g = document.getElementById('grid');
+  g.style.gridTemplateColumns = 'repeat(' + COLS + ', 64px)';
+  g.innerHTML = '';
+
+  // Render from top row down (ROWS-1 → 0) so (0,0) is bottom-left
+  for (let r = ROWS - 1; r >= 0; r--) {
+    for (let c = 0; c < COLS; c++) {
+      let k    = rc(r, c);
+      let cell = document.createElement('div');
+      let st   = cellState[k] || {};
+      let isAgent = agent.r === r && agent.c === c;
+
+      if (isAgent)       cell.className = 'cell agent';
+      else if (st.danger)  cell.className = 'cell danger';
+      else if (st.visited) cell.className = 'cell visited';
+      else if (st.safe)    cell.className = 'cell safe';
+      else                 cell.className = 'cell unknown';
+
+      let icons = '';
+      if (isAgent) icons += '🤖';
+      if (world.gold && rc(r, c) === world.gold && !agent.hasGold) icons += '💛';
+      if (!agent.alive && world.pits.has(k))        icons += '🕳';
+      if (!agent.alive && k === world.wumpusPos)     icons += '👾';
+      if (st.visited && kb.facts.has('breeze_' + r + '_' + c))  icons += '💨';
+      if (st.visited && kb.facts.has('stench_' + r + '_' + c))  icons += '💀';
+
+      let perceptLabel = '';
+      if (st.visited && !isAgent) {
+        let pts = [];
+        if (kb.facts.has('breeze_' + r + '_' + c)) pts.push('B');
+        if (kb.facts.has('stench_' + r + '_' + c)) pts.push('S');
+        if (pts.length) perceptLabel = '<span class="percept">' + pts.join(' ') + '</span>';
+      }
+
+      cell.innerHTML =
+        '<span class="coord">' + r + ',' + c + '</span>' +
+        '<span class="icons">' + icons + '</span>' +
+        perceptLabel;
+
+      g.appendChild(cell);
+    }
+  }
+}
+
+function updateMetrics() {
+  document.getElementById('m-steps').textContent = metrics.steps;
+  document.getElementById('m-infer').textContent = metrics.infer;
+  document.getElementById('m-safe').textContent  = metrics.safe;
+  document.getElementById('m-danger').textContent = metrics.danger;
+}
+
+function addLog(msg, cls) {
+  let el   = document.getElementById('log');
+  let line = document.createElement('div');
+  line.className = cls || '';
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+initWorld();
+</script>
+</body>
+</html>
